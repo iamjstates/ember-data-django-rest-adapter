@@ -140,6 +140,12 @@
                 url = url.replace(endpoint, parent_plural + "/" + parent_value + "/" + endpoint);
             }
             return url;
+        },
+        removeTrailingSlash: function(url) {
+            if (url.charAt(url.length -1) === '/') {
+                return url.slice(0, -1);
+            }
+            return url;
         }
 
     });
