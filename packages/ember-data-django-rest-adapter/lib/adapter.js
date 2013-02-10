@@ -2,7 +2,8 @@
     var get = Ember.get, set = Ember.set;
 
     DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
-
+        /* cross domain - just in case */
+        crossDomain: null,
         bulkCommit: false,
         serializer: DS.DjangoRESTSerializer,
 
@@ -108,6 +109,10 @@
             var url = this._super(record, suffix);
             if (url.charAt(url.length -1) !== '/') {
                 url += '/';
+            }
+            // Add the server domain if any
+            if (!!this.crossDomain) {
+                url = this.removeTrailingSlash(this.crossDomain) + url;
             }
             return url;
         },
