@@ -11,8 +11,8 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
 
     updateRecord: function(store, type, record) {
         var data = store.serializerFor(type.typeKey).serialize(record);
-        var id = get(record, 'id'); //todo find pk (not always id)
-        return this.ajax(this.buildURL(type.typeKey, id), "PUT", { data: data });
+        var item = get(record, 'id') || get(record, 'slug');
+        return this.ajax(this.buildURL(type.typeKey, item), "PUT", { data: data });
     },
 
     findMany: function(store, type, ids, parent) {
@@ -35,8 +35,8 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
         return this._super(url, type, hash);
     },
 
-    buildURL: function(type, id) {
-        var url = this._super(type, id);
+    buildURL: function(type, item) {
+        var url = this._super(type, item);
 
         if (url.charAt(url.length -1) !== '/') {
             url += '/';
@@ -73,7 +73,7 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
         }
 
         if (totalParents.length === 1 && totalHydrated.length === 1) {
-            var parent_value = record.get(totalParents[0]).get('id'); //todo find pk (not always id)
+            var parent_value = record.get(totalParents[0]).get('id') || record.get(totalParents[0]).get('slug'); //todo find pk (not always id)
             var parent_plural = Ember.String.pluralize(totalParents[0]);
             var endpoint = url.split('/').reverse()[1];
             return url.replace(endpoint, parent_plural + "/" + parent_value + "/" + endpoint);
@@ -85,7 +85,7 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
     buildUrlWithParentWhenAvailable: function(record, url, totalHydrated) {
         if (record && url && totalHydrated) {
             var parent_type = totalHydrated[0];
-            var parent_pk = record.get(parent_type).get('id'); //todo find pk (not always id)
+            var parent_pk = record.get(parent_type).get('id') || record.get(parent_type).get('slug'); //todo find pk (not always id)
             var parent_plural = Ember.String.pluralize(parent_type);
             var endpoint = url.split('/').reverse()[1];
             url = url.replace(endpoint, parent_plural + "/" + parent_pk + "/" + endpoint);
@@ -97,7 +97,7 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
         var root, url, endpoint, parentValue;
 
         endpoint = Ember.String.pluralize(type.typeKey);
-        parentValue = parent.get('id'); //todo find pk (not always id)
+        parentValue = parent.get('id') || parent.get('slug'); //todo find pk (not always id)
         root = parent.constructor.typeKey;
         url = this.buildURL(root, parentValue);
 
