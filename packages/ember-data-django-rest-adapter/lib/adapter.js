@@ -1,153 +1,139 @@
-(function() {
-    var get = Ember.get, set = Ember.set;
+function rejectionHandler(reason) {
+    Ember.Logger.error(reason, reason.message);
+    throw reason;
+}
 
-    DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
-        /* cross domain - just in case */
-        crossDomain: null,
-        bulkCommit: false,
-        serializer: DS.DjangoRESTSerializer,
+DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
+    bulkCommit: false,
+    serializer: DS.DjangoRESTSerializer,
 
-        createRecord: function(store, type, record) {
-            var json = {}
-            , root = this.rootForType(type)
-            , data  = record.serialize()
-            , url = this.buildUrlWithParentWhenAvailable(record, this.buildURL(root));
+    createRecord: function(store, type, record) {
+        var root, adapter, data;
 
-            this.ajax(url, "POST", {
-                data: data,
-                context: this,
-                success: function(pre_json) {
-                    json[root] = pre_json;
-                    Ember.run(this, function(){
-                        this.didCreateRecord(store, type, record, json);
-                    });
-                },
-                error: function(xhr) {
-                    this.didError(store, type, record, xhr);
-                }
-            });
-        },
+        root = this.rootForType(type);
+        adapter = this;
+        data = this.serialize(record);
 
-        updateRecord: function(store, type, record) {
-            var json = {}
-            , id = get(record, 'id')
-            , root = this.rootForType(type)
-            , data  = record.serialize();
+        return this.ajax(this.buildURL(root), "POST", {
+            data: data
+        }).then(function(json) {
+            adapter.didCreateRecord(store, type, record, json);
+        }, function(xhr) {
+            adapter.didError(store, type, record, xhr);
+            throw xhr;
+        }).then(null, rejectionHandler);
+    },
 
-            this.ajax(this.buildURL(root, id), "PUT", {
-                data: data,
-                context: this,
-                success: function(pre_json) {
-                    json[root] = pre_json;
-                    Ember.run(this, function(){
-                        this.didUpdateRecord(store, type, record, json);
-                    });
-                },
-                error: function(xhr) {
-                    this.didError(store, type, record, xhr);
-                }
-            });
-        },
+    updateRecord: function(store, type, record) {
+        var item, root, adapter, data;
 
-        findMany: function(store, type, ids, parent) {
-            var json = {}
-            , root = this.rootForType(type)
-            , plural = this.pluralize(root)
-            , ids = this.serializeIds(ids)
-            , url = this.buildFindManyUrlWithParent(store, type, ids, parent);
+        item = Ember.get(record, 'id') || Ember.get(record, 'slug');
+        root = this.rootForType(type);
+        adapter = this;
+        data = this.serialize(record);
 
-            this.ajax(url, "GET", {
-                success: function(pre_json) {
-                    json[plural] = pre_json;
-                    Ember.run(this, function(){
-                        this.didFindMany(store, type, json);
-                    });
-                }
-            });
-        },
+        return this.ajax(this.buildURL(root, item), "PUT", {
+            data: data
+        }).then(function(json) {
+            adapter.didUpdateRecord(store, type, record, json);
+        }, function(xhr) {
+            adapter.didError(store, type, record, xhr);
+            throw xhr;
+        }).then(null, rejectionHandler);
+    },
 
-        findAll: function(store, type, since) {
-            var json = {}
-            , root = this.rootForType(type)
-            , plural = this.pluralize(root);
+    findMany: function(store, type, ids, parent) {
+        var adapter, root, url;
+        adapter = this;
 
-            this.ajax(this.buildURL(root), "GET", {
-                data: this.sinceQuery(since),
-                success: function(pre_json) {
-                    json[plural] = pre_json;
-                    Ember.run(this, function(){
-                        this.didFindAll(store, type, json);
-                    });
-                }
-            });
-        },
-
-        find: function(store, type, id) {
-            var json = {}
-            , root = this.rootForType(type);
-
-            this.ajax(this.buildURL(root, id), "GET", {
-                success: function(pre_json) {
-                    json[root] = pre_json;
-                    Ember.run(this, function(){
-                        this.didFindRecord(store, type, json, id);
-                    });
-                }
-            });
-        },
-
-        ajax: function(url, type, hash) {
-            hash.url = url;
-            hash.type = type;
-            hash.dataType = 'json';
-            hash.context = this;
-
-            jQuery.ajax(hash);
-        },
-
-        buildURL: function(record, suffix) {
-            var url = this._super(record, suffix);
-            if (url.charAt(url.length -1) !== '/') {
-                url += '/';
-            }
-            // Add the server domain if any
-            if (!!this.crossDomain) {
-                url = this.removeTrailingSlash(this.crossDomain) + url;
-            }
-            return url;
-        },
-
-        buildFindManyUrlWithParent: function(store, type, ids, parent) {
-            if (!parent) {
-                Ember.assert("You need to add belongsTo for type (" + type + "). No Parent for this record was found");
-            }
-
-            var root = this.rootForType(type);
-            var url = this.buildURL(root);
-            var parentType = store.typeForClientId(parent.get('clientId'));
-            var parentRoot = this.rootForType(parentType);
-            var record = {'parent_key': parentRoot, 'parent_value': parent.get('id')};
-
-            return this.buildUrlWithParentWhenAvailable(record, url);
-        },
-
-        buildUrlWithParentWhenAvailable: function(record, url) {
-            var parent_key = record['parent_key'] || record.get('parent_key');
-            var parent_value = record['parent_value'] || record.get('parent_value');
-            if (parent_key && parent_value) {
-                var endpoint = url.split('/').reverse()[1];
-                var parent_plural = this.pluralize(parent_key);
-                url = url.replace(endpoint, parent_plural + "/" + parent_value + "/" + endpoint);
-            }
-            return url;
-        },
-        removeTrailingSlash: function(url) {
-            if (url.charAt(url.length -1) === '/') {
-                return url.slice(0, -1);
-            }
-            return url;
+        if (parent) {
+            url = this.buildFindManyUrlWithParent(type, parent);
+        } else {
+            root = this.rootForType(type);
+            url = this.buildURL(root);
         }
 
-    });
+        return this.ajax(url, "GET", {
+        }).then(function(json) {
+          adapter.didFindMany(store, type, json);
+        }).then(null, rejectionHandler);
+    },
 
-})();
+    ajax: function(url, type, hash) {
+      hash = hash || {};
+      hash.cache = false;
+
+      return this._super(url, type, hash);
+    },
+
+    buildURL: function(record, suffix) {
+        var url = this._super(record, suffix);
+
+        if (url.charAt(url.length -1) !== '/') {
+            url += '/';
+        }
+
+        return url;
+    },
+
+    buildFindManyUrlWithParent: function(type, parent) {
+        var root, url, endpoint, parentType, parentValue;
+
+        endpoint = parent.get('findManyKey');
+        parentType = parent.get('findManyType');
+
+        if (typeof endpoint !== 'string') {
+            parent.eachRelationship(function(name, relationship) {
+                if (relationship.kind === 'hasMany' && relationship.type === type) {
+                    endpoint = relationship.key;
+                    parentType = relationship.parentType;
+                }
+            });
+        }
+
+        Ember.assert("could not find a relationship for the specified child type", typeof endpoint !== "undefined");
+
+        endpoint = this.serializer.keyForAttributeName(parentType, endpoint);
+        parentValue = parent.get('id') || parent.get('slug');
+        root = this.rootForType(parentType);
+        url = this.buildURL(root, parentValue);
+
+        return url + endpoint + '/';
+    },
+
+    /**
+      RESTAdapter expects HTTP 422 for invalid records and a JSON response
+      with errors inside JSON root `errors`, however DRF uses 400
+      and errors without a JSON root.
+    */
+    didError: function(store, type, record, xhr) {
+        if (xhr.status === 400) {
+            var data = JSON.parse(xhr.responseText);
+            var errors = {};
+
+            // Convert error key names
+            record.eachAttribute(function(name) {
+                var attr = this.serializer.keyForAttributeName(type, name);
+                if (attr in data) {
+                    errors[name] = data[attr];
+                }
+            }, this);
+
+            record.eachRelationship(function(name, relationship) {
+                var attr;
+                if (relationship.kind === 'belongsTo') {
+                    attr = this.serializer.keyForBelongsTo(type, name);
+                } else {
+                    attr = this.serializer.keyForHasMany(type, name);
+                }
+                if (attr in data) {
+                    errors[name] = data[attr];
+                }
+            }, this);
+
+            store.recordWasInvalid(record, errors);
+        } else {
+            this._super(store, type, record, xhr);
+        }
+    }
+});
