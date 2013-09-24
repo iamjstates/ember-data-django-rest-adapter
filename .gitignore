@@ -8,3 +8,4 @@ node_modules/*
 tests/dist/
 
 tests/lib/tmpl.min.js
+Gemfile.lock
