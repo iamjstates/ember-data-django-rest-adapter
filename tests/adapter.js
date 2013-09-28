@@ -1,3 +1,47 @@
+(function() {
+var get = Ember.get, set = Ember.set, isNone = Ember.isNone;
+
+DS.DjangoRESTSerializer = DS.JSONSerializer.extend({
+
+    init: function() {
+        this._super.apply(this, arguments);
+    },
+
+    extractDjangoPayload: function(store, type, payload) {
+        for (var item in payload) {
+            if (typeof(payload[item][0]) !== 'number') {
+                if (payload[item].constructor.name === 'Array') {
+                    var singular_type = Ember.String.singularize(item);
+                    /*jshint loopfunc:true*/
+                    var ids = payload[item].map(function(related) {
+                        store.push(singular_type, related);
+                        return related.id; //todo find pk (not always id)
+                    });
+                    payload[item] = ids;
+                }
+            }
+        }
+    },
+
+    extractSingle: function(store, type, payload) {
+        this.extractDjangoPayload(store, type, payload);
+        return payload;
+    },
+
+    extractArray: function(store, type, payload) {
+        for (var j = 0; j < payload.length; j++) {
+            this.extractDjangoPayload(store, type, payload[j]);
+        }
+        return payload;
+    }
+
+});
+
+})();
+
+
+
+(function() {
 var get = Ember.get, set = Ember.set, isNone = Ember.isNone;
 
 DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
@@ -9,10 +53,11 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
         return this.ajax(url, "POST", { data: data });
     },
 
+    //untested code here
     updateRecord: function(store, type, record) {
         var data = store.serializerFor(type.typeKey).serialize(record);
-        var item = get(record, 'id') || get(record, 'slug');
-        return this.ajax(this.buildURL(type.typeKey, item), "PUT", { data: data });
+        var id = get(record, 'id'); //todo find pk (not always id)
+        return this.ajax(this.buildURL(type.typeKey, id), "PUT", { data: data });
     },
 
     findMany: function(store, type, ids, parent) {
@@ -35,8 +80,8 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
         return this._super(url, type, hash);
     },
 
-    buildURL: function(type, item) {
-        var url = this._super(type, item);
+    buildURL: function(type, id) {
+        var url = this._super(type, id);
 
         if (url.charAt(url.length -1) !== '/') {
             url += '/';
@@ -73,7 +118,7 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
         }
 
         if (totalParents.length === 1 && totalHydrated.length === 1) {
-            var parent_value = record.get(totalParents[0]).get('id') || record.get(totalParents[0]).get('slug'); //todo find pk (not always id)
+            var parent_value = record.get(totalParents[0]).get('id'); //todo find pk (not always id)
             var parent_plural = Ember.String.pluralize(totalParents[0]);
             var endpoint = url.split('/').reverse()[1];
             return url.replace(endpoint, parent_plural + "/" + parent_value + "/" + endpoint);
@@ -85,7 +130,7 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
     buildUrlWithParentWhenAvailable: function(record, url, totalHydrated) {
         if (record && url && totalHydrated) {
             var parent_type = totalHydrated[0];
-            var parent_pk = record.get(parent_type).get('id') || record.get(parent_type).get('slug'); //todo find pk (not always id)
+            var parent_pk = record.get(parent_type).get('id'); //todo find pk (not always id)
             var parent_plural = Ember.String.pluralize(parent_type);
             var endpoint = url.split('/').reverse()[1];
             url = url.replace(endpoint, parent_plural + "/" + parent_pk + "/" + endpoint);
@@ -97,7 +142,7 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
         var root, url, endpoint, parentValue;
 
         endpoint = Ember.String.pluralize(type.typeKey);
-        parentValue = parent.get('id') || parent.get('slug'); //todo find pk (not always id)
+        parentValue = parent.get('id'); //todo find pk (not always id)
         root = parent.constructor.typeKey;
         url = this.buildURL(root, parentValue);
 
@@ -105,3 +150,5 @@ DS.DjangoRESTAdapter = DS.RESTAdapter.extend({
     }
 
 });
+
+})();
